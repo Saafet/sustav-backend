@@ -111,7 +111,6 @@ public class AdminController {
 
     // ======================
     // Promjena role
-    // =====================
 
     @Operation(summary = "Promijeni rolu korisniku po ID-u")
     @PutMapping("/role-by-id")
