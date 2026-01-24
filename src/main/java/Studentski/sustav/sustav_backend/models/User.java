@@ -1,5 +1,6 @@
 package Studentski.sustav.sustav_backend.models;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 
@@ -27,14 +28,17 @@ public class User {
     @Column(unique = true, nullable = false)
     private String email;
 
-    @Schema(example = "lozinka123")
+    @Schema (example = "Lozinka123")
     @Column(nullable = false)
     private String password;
 
     @Schema(hidden = true)
+    @JsonIgnore
     @Column
     private String refreshToken;
 
+    @Schema(hidden = true)
+    @JsonIgnore
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "user_roles",
@@ -55,16 +59,41 @@ public class User {
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
+
     public String getLastname() { return lastname; }
     public void setLastname(String lastname) { this.lastname = lastname; }
+
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+
     public String getRefreshToken() { return refreshToken; }
     public void setRefreshToken(String refreshToken) { this.refreshToken = refreshToken; }
+
     public Set<Role> getRoles() { return roles; }
     public void setRoles(Set<Role> roles) { this.roles = roles; }
+
+    @Schema(hidden = true)
+    @JsonIgnore
+    public String getRoleName() {
+        if (roles.isEmpty()) return "USER";
+        return roles.iterator().next().getName();
+    }
+
+    public void setRoleName(Role role) {
+        this.roles.clear();
+        this.roles.add(role);
+    }
+
+    public void setRoleName(String roleName) {
+        this.roles.clear();
+        Role role = new Role();
+        role.setName(roleName.toUpperCase());
+        this.roles.add(role);
+    }
 }

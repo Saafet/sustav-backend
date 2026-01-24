@@ -6,10 +6,11 @@ import Studentski.sustav.sustav_backend.repositories.RoleRepository;
 import Studentski.sustav.sustav_backend.repositories.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
@@ -19,7 +20,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/admin")
-@Tag(name = "Upravljanje admin panelom")
+@Tag(name = "Upravljanje admin panelom", description = "Admin rute za upravljanje korisnicima i rolama")
 @SecurityRequirement(name = "bearerAuth")
 public class AdminController {
 
@@ -27,11 +28,20 @@ public class AdminController {
     private UserRepository userRepository;
 
     @Autowired
+    private RoleRepository roleRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
+
     @Operation(summary = "Dohvati korisnika po ID-u")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Korisnik pronađen"),
+            @ApiResponse(responseCode = "401", description = "Neautorizovan pristup"),
+            @ApiResponse(responseCode = "403", description = "Zabranjen pristup"),
+            @ApiResponse(responseCode = "404", description = "Korisnik nije pronađen")
+    })
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<User> getUserById(@PathVariable Long id) {
         Optional<User> user = userRepository.findById(id);
         return user.map(ResponseEntity::ok)
@@ -39,25 +49,34 @@ public class AdminController {
     }
 
     @Operation(summary = "Dohvati sve korisnike")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lista korisnika"),
+            @ApiResponse(responseCode = "401", description = "Neautorizovan pristup"),
+            @ApiResponse(responseCode = "403", description = "Zabranjen pristup")
+    })
     @GetMapping("/all")
-    @PreAuthorize("hasRole('ADMIN')")
     public Iterable<User> getAllUsers() {
         return userRepository.findAll();
     }
 
     @Operation(summary = "Pretraži korisnike po imenu ili emailu")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Rezultati pretrage"),
+            @ApiResponse(responseCode = "401", description = "Neautorizovan pristup"),
+            @ApiResponse(responseCode = "403", description = "Zabranjen pristup")
+    })
     @GetMapping("/search")
-    @PreAuthorize("hasRole('ADMIN')")
     public List<User> searchUsers(@RequestParam String query) {
         return userRepository.findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(query, query);
     }
 
-    // ======================
-    // Kreiranje korisnika
-    // ======================
-    @Autowired
-    private RoleRepository roleRepository;
-
+    @Operation(summary = "Kreiraj novog korisnika")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Korisnik uspješno kreiran"),
+            @ApiResponse(responseCode = "400", description = "Korisnik već postoji"),
+            @ApiResponse(responseCode = "401", description = "Neautorizovan pristup"),
+            @ApiResponse(responseCode = "403", description = "Zabranjen pristup")
+    })
     @PostMapping("/create")
     public ResponseEntity<?> createUser(@RequestParam String email,
                                         @RequestParam String password,
@@ -75,29 +94,28 @@ public class AdminController {
         newUser.setName(name);
         newUser.setLastname(lastname);
 
-        // Dohvati role iz baze
         Role role = roleRepository.findByName("ROLE_" + roleName.toUpperCase())
                 .orElseThrow(() -> new RuntimeException("Role not found"));
-        newUser.getRoles().add(role);
 
+        newUser.getRoles().add(role);
         userRepository.save(newUser);
 
         return ResponseEntity.ok(Map.of("message", "Korisnik kreiran"));
     }
 
-
-
-
-    // ======================
-    // Uređivanje korisnika
-    // ======================
     @Operation(summary = "Uredi korisnika")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Korisnik ažuriran"),
+            @ApiResponse(responseCode = "401", description = "Neautorizovan pristup"),
+            @ApiResponse(responseCode = "403", description = "Zabranjen pristup"),
+            @ApiResponse(responseCode = "404", description = "Korisnik nije pronađen")
+    })
     @PutMapping("/edit/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> editUser(@PathVariable Long id,
                                       @RequestParam(required = false) String name,
                                       @RequestParam(required = false) String lastname,
                                       @RequestParam(required = false) String email) {
+
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Korisnik nije pronađen"));
 
@@ -109,47 +127,81 @@ public class AdminController {
         return ResponseEntity.ok(Map.of("message", "Korisnik uspješno ažuriran"));
     }
 
-    // ======================
-    // Promjena role
+    @Operation(summary = "Obriši korisnika")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Korisnik obrisan"),
+            @ApiResponse(responseCode = "401", description = "Neautorizovan pristup"),
+            @ApiResponse(responseCode = "403", description = "Zabranjen pristup"),
+            @ApiResponse(responseCode = "404", description = "Korisnik nije pronađen")
+    })
+    @DeleteMapping("/delete/{id}")
+    public ResponseEntity<?> deleteUser(@PathVariable Long id) {
+        if (!userRepository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        userRepository.deleteById(id);
+        return ResponseEntity.ok(Map.of("message", "Korisnik obrisan"));
+    }
 
     @Operation(summary = "Promijeni rolu korisniku po ID-u")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Rola uspješno promijenjena"),
+            @ApiResponse(responseCode = "401", description = "Neautorizovan pristup"),
+            @ApiResponse(responseCode = "403", description = "Zabranjen pristup"),
+            @ApiResponse(responseCode = "404", description = "Korisnik ili rola nisu pronađeni")
+    })
     @PutMapping("/role-by-id")
-    public ResponseEntity<?> changeRoleById(
-            @RequestParam Long userId,
-            @RequestParam Long roleId) {
+    public ResponseEntity<?> changeRoleById(@RequestParam Long userId,
+                                            @RequestParam Long roleId) {
 
-        // 1. Dohvati korisnika
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Korisnik nije pronađen"));
 
-        // 2. Dohvati rolu po ID-u
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new RuntimeException("Role nije pronađena"));
 
-        // 3. Dodaj rolu korisniku
         user.getRoles().clear();
         user.getRoles().add(role);
-
-        // 4. Spremi promjene
         userRepository.save(user);
 
-        return ResponseEntity.ok(Map.of("message", "Rola korisniku uspješno promijenjena na: " + role.getName()));
+        return ResponseEntity.ok(Map.of(
+                "message", "Rola korisniku uspješno promijenjena na: " + role.getName()
+        ));
     }
 
-
-
-    // ======================
-    // Reset lozinke
-    // ======================
     @Operation(summary = "Reset lozinke korisnika")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lozinka resetovana"),
+            @ApiResponse(responseCode = "401", description = "Neautorizovan pristup"),
+            @ApiResponse(responseCode = "403", description = "Zabranjen pristup"),
+            @ApiResponse(responseCode = "404", description = "Korisnik nije pronađen")
+    })
     @PutMapping("/reset-password/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> resetPassword(@PathVariable Long id, @RequestParam String newPassword) {
+    public ResponseEntity<?> resetPassword(@PathVariable Long id,
+                                           @RequestParam String newPassword) {
+
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Korisnik nije pronađen"));
+
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
+
         return ResponseEntity.ok(Map.of("message", "Lozinka resetovana"));
     }
 
+    @Operation(summary = "Obriši više korisnika odjednom")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Bulk brisanje završeno"),
+            @ApiResponse(responseCode = "401", description = "Neautorizovan pristup"),
+            @ApiResponse(responseCode = "403", description = "Zabranjen pristup")
+    })
+    @DeleteMapping("/bulk-delete")
+    public ResponseEntity<?> bulkDelete(@RequestParam List<Long> ids) {
+        ids.forEach(id -> {
+            if (userRepository.existsById(id)) {
+                userRepository.deleteById(id);
+            }
+        });
+        return ResponseEntity.ok(Map.of("message", "Bulk brisanje završeno"));
+    }
 }
