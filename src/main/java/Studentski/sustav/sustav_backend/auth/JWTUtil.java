@@ -1,8 +1,6 @@
 package Studentski.sustav.sustav_backend.auth;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -19,33 +17,49 @@ public class JWTUtil {
     private String secret;
 
     @Value("${jwt.expiration}")
-    private long expiration;
+    private long accessTokenExpiration;
 
     @Value("${jwt.refresh-expiration}")
-    private long refreshExpiration;
+    private long refreshTokenExpiration;
 
-    // Dobavljanje ključa za potpisivanje
-    public SecretKey getSigningKey() {
+    // =========================
+    // SIGNING KEY
+    // =========================
+    private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes());
     }
 
-    // Generiranje access tokena s listom uloga
-    public String generateToken(String username, List<String> roles) {
+    // =========================
+    // ACCESS TOKEN
+    // =========================
+    public String generateAccessToken(String username, List<String> roles) {
         return Jwts.builder()
                 .setSubject(username)
                 .claim("roles", roles)
+                .claim("token_type", "access")
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + expiration))
+                .setExpiration(new Date(System.currentTimeMillis() + accessTokenExpiration))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
 
-    // Generiranje refresh tokena
-    public String generateRefreshToken() {
-        return UUID.randomUUID().toString();
+    // =========================
+    // REFRESH TOKEN (MODERNI)
+    // =========================
+    public String generateRefreshToken(String username) {
+        return Jwts.builder()
+                .setSubject(username)
+                .claim("token_type", "refresh")
+                .setId(UUID.randomUUID().toString()) // jti → token rotation
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + refreshTokenExpiration))
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
     }
 
-    // Validacija tokena
+    // =========================
+    // VALIDATION
+    // =========================
     public boolean validateToken(String token) {
         try {
             Jwts.parser()
@@ -53,17 +67,38 @@ public class JWTUtil {
                     .build()
                     .parseClaimsJws(token);
             return true;
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    // =========================
+    // VALIDATE REFRESH TOKEN
+    // =========================
+    public boolean validateRefreshToken(String token) {
+        try {
+            Claims claims = getClaims(token);
+            return "refresh".equals(claims.get("token_type"));
         } catch (Exception e) {
             return false;
         }
     }
 
-    // Dohvat claimsa iz tokena
+    // =========================
+    // CLAIMS
+    // =========================
     public Claims getClaims(String token) {
         return Jwts.parser()
                 .setSigningKey(getSigningKey())
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
+    }
+
+    // =========================
+    // USERNAME FROM TOKEN
+    // =========================
+    public String getUsernameFromToken(String token) {
+        return getClaims(token).getSubject();
     }
 }
