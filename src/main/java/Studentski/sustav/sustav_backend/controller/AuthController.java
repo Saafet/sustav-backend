@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/auth")
-@Tag(name = "Autentifikacija")
+@Tag(name = "1. Autentifikacija")
 public class AuthController {
 
     @Autowired
@@ -37,9 +37,9 @@ public class AuthController {
     @Autowired
     private RoleRepository roleRepository;
 
-    // ===============================
+
     // REGISTRACIJA
-    // ===============================
+
     @Operation(summary = "Registracija korisnika")
     @PostMapping("/register")
     public ResponseEntity<User> register(@RequestBody User user) {
@@ -55,39 +55,33 @@ public class AuthController {
         return ResponseEntity.ok(userRepository.save(user));
     }
 
-    // ===============================
+
     // LOGIN
-    // ===============================
+
     @Operation(summary = "Prijava korisnika")
     @PostMapping("/login")
     public ResponseEntity<Map<String, String>> login(
             @RequestParam String email,
             @RequestParam String password
     ) {
-        // Tražimo korisnika po emailu
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Provjera lozinke
         if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new RuntimeException("Invalid credentials");
         }
 
-        // Dohvaćanje imena uloga
         List<String> roles = user.getRoles().stream()
                 .map(Role::getName)
                 .collect(Collectors.toList());
 
-        // Generiranje tokena
         String accessToken = jwtUtil.generateAccessToken(user.getEmail(), roles);
         String refreshToken = jwtUtil.generateRefreshToken(user.getEmail());
 
-        // Postavljanje refresh tokena i vremena isteka
         user.setRefreshToken(refreshToken);
-        user.setRefreshTokenExpiry(LocalDateTime.now().plusMinutes(20)); // 20 minuta primjer
+        user.setRefreshTokenExpiry(LocalDateTime.now().plusMinutes(20)); // 20 minuta
         userRepository.save(user);
 
-        // Vraćanje tokena i vremena isteka
         return ResponseEntity.ok(Map.of(
                 "accessToken", accessToken,
                 "refreshToken", refreshToken,
@@ -97,9 +91,9 @@ public class AuthController {
 
 
 
-    // ===============================
+
     // REFRESH TOKEN
-    // ===============================
+
     @Operation(summary = "Refresh access tokena")
     @PostMapping("/refresh")
     public ResponseEntity<Map<String, String>> refreshToken(@RequestParam String refreshToken) {

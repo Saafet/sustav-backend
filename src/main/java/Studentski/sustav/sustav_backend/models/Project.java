@@ -25,19 +25,22 @@ public class Project {
     @Schema(example = "Projekt iz kolegija Programsko inzenjerstvo")
     private String description;
 
+    // ==== Članovi projekta ====
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "project_users",
             joinColumns = @JoinColumn(name = "project_id"),
             inverseJoinColumns = @JoinColumn(name = "user_id")
     )
+    @JsonIgnoreProperties({"projects", "tasks"})
     private Set<User> members = new HashSet<>();
 
+    // ==== Zadatci projekta ====
     @OneToMany(mappedBy = "project", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonIgnoreProperties("project")
+    @JsonIgnoreProperties({"project", "assignedTo"})
     private Set<Task> tasks = new HashSet<>();
 
-    // GETTERS & SETTERS
+    // ===== GETTERS & SETTERS =====
     public Long getId() { return id; }
 
     public String getName() { return name; }
@@ -52,7 +55,7 @@ public class Project {
     public Set<Task> getTasks() { return tasks; }
     public void setTasks(Set<Task> tasks) { this.tasks = tasks; }
 
-    // POMOĆNE METODE
+    // ===== POMOĆNE METODE =====
     @JsonIgnore
     public void removeAllMembers() {
         for (User u : members) {

@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/projects")
-@Tag(name = "Projekti", description = "Operacije nad projektima")
+@Tag(name = "4. Projekti")
 @SecurityRequirement(name = "bearerAuth")
 public class ProjectController {
 

@@ -15,7 +15,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/user")
-@Tag(name = "Upravljanje korisnicima")
+@Tag(name = "2. Upravljanje korisnicima")
 @SecurityRequirement(name = "bearerAuth")
 public class UserController {
 
@@ -106,12 +106,10 @@ public class UserController {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Korisnik nije pronadjen"));
 
-        // 🔐 invalidacija refresh tokena
         user.setRefreshToken(null);
         user.setRefreshTokenExpiry(null);
         userRepository.save(user);
 
-        // 🧹 čišćenje security konteksta
         SecurityContextHolder.clearContext();
 
         return ResponseEntity.ok(

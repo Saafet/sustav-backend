@@ -10,13 +10,15 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/tasks")
-@Tag(name = "Zadaci")
+@Tag(name = "5. Zadaci")
 public class TaskController {
 
     @Autowired
@@ -28,89 +30,114 @@ public class TaskController {
     @Autowired
     private UserRepository userRepository;
 
-    // 🔹 Dohvati zadatke po projektu
-    @Operation(summary = "Dohvati zadatke po projektu")
-    @GetMapping("/project/{projectId}")
-    public List<Task> getTasksByProject(@PathVariable Long projectId) {
-        return taskRepository.findByProjectId(projectId);
-    }
 
-    // 🔹 Dohvati zadatke po korisniku (student vidi svoje zadatke)
-    @Operation(summary = "Dohvati zadatke po korisniku")
-    @GetMapping("/user/{userId}")
-    public List<Task> getTasksByUser(@PathVariable Long userId) {
-        return taskRepository.findByAssignedToId(userId);
-    }
+    // ADMIN RUTE
 
-    // 🔹 Kreiraj zadatak (profesor/admin)
-    @Operation(summary = "Kreiraj novi zadatak")
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Kreiraj novi zadatak (samo admin)")
     @PostMapping
-    public Task createTask(
+    public ResponseEntity<?> createTask(
             @RequestParam Long projectId,
             @RequestParam Long userId,
             @RequestBody Task task
     ) {
-        Project project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("Projekt ne postoji"));
+        Project project = projectRepository.findById(projectId).orElse(null);
+        User user = userRepository.findById(userId).orElse(null);
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Korisnik ne postoji"));
+        if (project == null || user == null) {
+            return ResponseEntity.badRequest().body("Projekt ili korisnik ne postoji");
+        }
 
         task.setProject(project);
         task.setAssignedTo(user);
         task.setStatus("TODO");
 
-        return taskRepository.save(task);
+        Task savedTask = taskRepository.save(task);
+        return ResponseEntity.ok(savedTask);
     }
 
-    // 🔹 Update statusa zadatka (student može samo svoj, profesor može sve)
-    @Operation(summary = "Promijeni status zadatka")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Obriši zadatak (samo admin)")
+    @DeleteMapping("/{taskId}")
+    public ResponseEntity<String> deleteTask(@PathVariable Long taskId) {
+        if (!taskRepository.existsById(taskId)) {
+            return ResponseEntity.notFound().build();
+        }
+        taskRepository.deleteById(taskId);
+        return ResponseEntity.ok("Zadatak je uspješno obrisan!");
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Dohvati sve zadatke po projektu (admin vidi sve)")
+    @GetMapping("/project/{projectId}")
+    public ResponseEntity<List<Task>> getTasksByProjectAdmin(@PathVariable Long projectId) {
+        if (!projectRepository.existsById(projectId)) {
+            return ResponseEntity.notFound().build();
+        }
+        List<Task> tasks = taskRepository.findByProjectId(projectId);
+        return ResponseEntity.ok(tasks);
+    }
+
+
+    // USER RUTE
+
+
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+    @Operation(summary = "Dohvati zadatke prijavljenog korisnika")
+    @GetMapping("/my-tasks")
+    public ResponseEntity<List<Task>> getMyTasks(Authentication authentication) {
+        User user = userRepository.findByEmail(authentication.getName()).orElse(null);
+        if (user == null) {
+            return ResponseEntity.notFound().build();
+        }
+        List<Task> tasks = taskRepository.findByAssignedToId(user.getId());
+        return ResponseEntity.ok(tasks);
+    }
+
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+    @Operation(summary = "Promijeni status zadatka (user može samo svoj, admin sve)")
     @PatchMapping("/{taskId}/status")
-    public Task updateTaskStatus(
+    public ResponseEntity<?> updateTaskStatus(
             @PathVariable Long taskId,
             @RequestParam String status,
-            @RequestParam Long userId
+            Authentication authentication
     ) {
-        Task task = taskRepository.findById(taskId)
-                .orElseThrow(() -> new RuntimeException("Zadatak ne postoji"));
+        Task task = taskRepository.findById(taskId).orElse(null);
+        if (task == null) {
+            return ResponseEntity.status(404).body("Zadatak ne postoji");
+        }
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Korisnik ne postoji"));
+        User user = userRepository.findByEmail(authentication.getName()).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(401).body("Korisnik ne postoji");
+        }
 
-        // Ako je student, može mijenjati samo svoj zadatak
-        boolean isStudent = user.getRoles().stream()
-                .anyMatch(r -> r.getName().equals("ROLE_STUDENT"));
+        boolean isAdmin = user.getRoles().stream().anyMatch(r -> r.getName().equals("ROLE_ADMIN"));
 
-        if (isStudent && !task.getAssignedTo().getId().equals(userId)) {
-            throw new RuntimeException("Nemate pravo mijenjati ovaj zadatak");
+        if (!isAdmin && !task.getAssignedTo().getId().equals(user.getId())) {
+            return ResponseEntity.status(403).body("Nemate pravo mijenjati ovaj zadatak");
         }
 
         task.setStatus(status);
-        return taskRepository.save(task);
+        Task updatedTask = taskRepository.save(task);
+        return ResponseEntity.ok(updatedTask);
     }
 
-    // 🔹 Brisanje zadatka (samo profesor/admin)
-    @Operation(summary = "Obriši zadatak (samo profesor)")
-    @DeleteMapping("/{taskId}")
-    public ResponseEntity<String> deleteTask(
-            @PathVariable Long taskId,
-            @RequestParam Long userId
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+    @Operation(summary = "Dohvati zadatke po projektu u kojima je korisnik član")
+    @GetMapping("/project/my/{projectId}")
+    public ResponseEntity<List<Task>> getTasksByProjectUser(
+            @PathVariable Long projectId,
+            Authentication authentication
     ) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Korisnik ne postoji"));
-
-        boolean isAdmin = user.getRoles().stream()
-                .anyMatch(r -> r.getName().equals("ROLE_ADMIN"));
-
-        if (!isAdmin) {
-            return ResponseEntity
-                    .status(403)
-                    .body("Nemate pravo brisati zadatak");
+        User user = userRepository.findByEmail(authentication.getName()).orElse(null);
+        if (user == null || !projectRepository.existsById(projectId)) {
+            return ResponseEntity.notFound().build();
         }
 
-        taskRepository.deleteById(taskId);
-        return ResponseEntity
-                .ok("Zadatak je uspješno obrisan!");
+        List<Task> tasks = taskRepository.findByProjectId(projectId);
+        tasks.removeIf(t -> t.getAssignedTo() == null || !t.getAssignedTo().getId().equals(user.getId()));
+        return ResponseEntity.ok(tasks);
     }
-
 }

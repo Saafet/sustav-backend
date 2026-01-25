@@ -20,7 +20,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/admin")
-@Tag(name = "Upravljanje admin panelom", description = "Admin rute za upravljanje korisnicima i rolama")
+@Tag(name = "3. Upravljanje admin panelom")
 @SecurityRequirement(name = "bearerAuth")
 public class AdminController {
 
