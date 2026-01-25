@@ -20,7 +20,7 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("Studentski sustav za upravljanje projektima i zadatcima")
-                        .version("1.0")
+                        .version("2.0")
                         .description("Databaza za upravljanje studentskim projektima i zadatcima s autentifikacijom putem JWT tokena."))
                 // Redoslijed tagova određuje redoslijed prikaza u swagger
                 .tags(
