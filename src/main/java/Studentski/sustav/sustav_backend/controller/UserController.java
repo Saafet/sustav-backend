@@ -106,11 +106,17 @@ public class UserController {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Korisnik nije pronadjen"));
 
+        // 🔐 invalidacija refresh tokena
         user.setRefreshToken(null);
+        user.setRefreshTokenExpiry(null);
         userRepository.save(user);
 
+        // 🧹 čišćenje security konteksta
+        SecurityContextHolder.clearContext();
+
         return ResponseEntity.ok(
-                Map.of("message", "Uspjesan logout")
+                Map.of("message", "Uspješan logout")
         );
     }
+
 }

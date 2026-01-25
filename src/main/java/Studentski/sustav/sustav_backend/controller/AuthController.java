@@ -9,17 +9,15 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashSet;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -39,76 +37,87 @@ public class AuthController {
     @Autowired
     private RoleRepository roleRepository;
 
-    @Operation(summary = "Registracija korisnika", description = "Dodaj novog korisnika u sustav")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Korisnik uspješno registriran", content = @Content()),
-            @ApiResponse(responseCode = "400", description = "Neispravan zahtjev", content = @Content())
-    })
+    // ===============================
+    // REGISTRACIJA
+    // ===============================
+    @Operation(summary = "Registracija korisnika")
     @PostMapping("/register")
     public ResponseEntity<User> register(@RequestBody User user) {
 
-        // Hashiranje lozinke
         user.setPassword(passwordEncoder.encode(user.getPassword()));
 
-        // Dodavanje ROLE_USER iz baze
         Role defaultRole = roleRepository.findByName("ROLE_USER")
                 .orElseThrow(() -> new RuntimeException("Default ROLE_USER not found"));
-        user.getRoles().clear();  // briše sve eventualne role koje user šalje
+
+        user.getRoles().clear();
         user.getRoles().add(defaultRole);
 
-        // Spremanje usera u bazu
-        User savedUser = userRepository.save(user);
-
-        return ResponseEntity.ok(savedUser);
+        return ResponseEntity.ok(userRepository.save(user));
     }
 
-
-    @Operation(summary = "Prijava korisnika", description = "Prijava korisnika i dohvat tokena")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Korisnik uspješno prijavljen", content = @Content()),
-            @ApiResponse(responseCode = "400", description = "Neispravan zahtjev", content = @Content()),
-            @ApiResponse(responseCode = "403", description = "Neovlašten pristup", content = @Content())
-    })
+    // ===============================
+    // LOGIN
+    // ===============================
+    @Operation(summary = "Prijava korisnika")
     @PostMapping("/login")
-    public ResponseEntity<Map<String, String>> login(@RequestParam String email, @RequestParam String password) {
+    public ResponseEntity<Map<String, String>> login(
+            @RequestParam String email,
+            @RequestParam String password
+    ) {
+        // Tražimo korisnika po emailu
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        // Provjera lozinke
         if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new RuntimeException("Invalid credentials");
+        }
+
+        // Dohvaćanje imena uloga
+        List<String> roles = user.getRoles().stream()
+                .map(Role::getName)
+                .collect(Collectors.toList());
+
+        // Generiranje tokena
+        String accessToken = jwtUtil.generateAccessToken(user.getEmail(), roles);
+        String refreshToken = jwtUtil.generateRefreshToken(user.getEmail());
+
+        // Postavljanje refresh tokena i vremena isteka
+        user.setRefreshToken(refreshToken);
+        user.setRefreshTokenExpiry(LocalDateTime.now().plusMinutes(20)); // 20 minuta primjer
+        userRepository.save(user);
+
+        // Vraćanje tokena i vremena isteka
+        return ResponseEntity.ok(Map.of(
+                "accessToken", accessToken,
+                "refreshToken", refreshToken,
+                "expiresAt", user.getRefreshTokenExpiry().toString()
+        ));
+    }
+
+
+
+    // ===============================
+    // REFRESH TOKEN
+    // ===============================
+    @Operation(summary = "Refresh access tokena")
+    @PostMapping("/refresh")
+    public ResponseEntity<Map<String, String>> refreshToken(@RequestParam String refreshToken) {
+
+        User user = userRepository.findByRefreshToken(refreshToken)
+                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
+
+        if (user.getRefreshTokenExpiry() == null || user.getRefreshTokenExpiry().isBefore(LocalDateTime.now())) {
+            throw new RuntimeException("Refresh token je istekao");
         }
 
         List<String> roles = user.getRoles().stream()
                 .map(Role::getName)
                 .collect(Collectors.toList());
 
-        String accessToken = jwtUtil.generateToken(user.getEmail(), roles);
-        String refreshToken = jwtUtil.generateRefreshToken();
-        user.setRefreshToken(refreshToken);
-        userRepository.save(user);
+        String newAccessToken = jwtUtil.generateAccessToken(user.getEmail(), roles);
 
-        return ResponseEntity.ok(Map.of(
-                "accessToken", accessToken,
-                "refreshToken", refreshToken
-        ));
-    }
-
-    @Operation(summary = "Refresh token", description = "Generiranje novog access tokena koristeći refresh token")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Access token uspješno generiran", content = @Content()),
-            @ApiResponse(responseCode = "400", description = "Neispravan zahtjev", content = @Content()),
-            @ApiResponse(responseCode = "403", description = "Neovlašten pristup", content = @Content())
-    })
-    @PostMapping("/refresh")
-    public ResponseEntity<Map<String, String>> refreshToken(@RequestParam String refreshToken) {
-        User user = userRepository.findByRefreshToken(refreshToken)
-                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
-
-        List<String> roles = user.getRoles().stream()
-                .map(Role::getName)
-                .collect(Collectors.toList());
-
-        String newAccessToken = jwtUtil.generateToken(user.getEmail(), roles);
         return ResponseEntity.ok(Map.of("accessToken", newAccessToken));
     }
+
 }

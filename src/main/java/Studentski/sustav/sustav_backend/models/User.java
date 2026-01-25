@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -28,14 +29,21 @@ public class User {
     @Column(unique = true, nullable = false)
     private String email;
 
-    @Schema (example = "Lozinka123")
+    @Schema(example = "Lozinka123")
     @Column(nullable = false)
     private String password;
 
+    // 🔐 REFRESH TOKEN
+    @Schema(hidden = true)
+    @JsonIgnore
+    @Column(length = 500)
+    private String refreshToken;
+
+    // ⏰ ISTEK REFRESH TOKENA
     @Schema(hidden = true)
     @JsonIgnore
     @Column
-    private String refreshToken;
+    private LocalDateTime refreshTokenExpiry;
 
     @Schema(hidden = true)
     @JsonIgnore
@@ -47,6 +55,13 @@ public class User {
     )
     private Set<Role> roles = new HashSet<>();
 
+    // =========================
+    // NOVO: ManyToMany veza s projektima
+    // =========================
+    @JsonIgnore
+    @ManyToMany(mappedBy = "members", fetch = FetchType.EAGER)
+    private Set<Project> projects = new HashSet<>();
+
     public User() {}
 
     public User(Long id, String name, String lastname, String email, String password) {
@@ -56,6 +71,8 @@ public class User {
         this.email = email;
         this.password = password;
     }
+
+    // ===== GETTERI & SETTERI =====
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -75,8 +92,14 @@ public class User {
     public String getRefreshToken() { return refreshToken; }
     public void setRefreshToken(String refreshToken) { this.refreshToken = refreshToken; }
 
+    public LocalDateTime getRefreshTokenExpiry() { return refreshTokenExpiry; }
+    public void setRefreshTokenExpiry(LocalDateTime refreshTokenExpiry) { this.refreshTokenExpiry = refreshTokenExpiry; }
+
     public Set<Role> getRoles() { return roles; }
     public void setRoles(Set<Role> roles) { this.roles = roles; }
+
+    public Set<Project> getProjects() { return projects; }
+    public void setProjects(Set<Project> projects) { this.projects = projects; }
 
     @Schema(hidden = true)
     @JsonIgnore
